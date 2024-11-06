@@ -1,5 +1,3 @@
-numpy
 opencv-python
-websockets
-asyncio
-av
+aiortc
+firebase-admin
