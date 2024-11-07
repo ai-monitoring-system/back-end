@@ -1,8 +1,13 @@
 {
-  "apiKey": "AIzaSyDITg40yAhlbAfnqvNdnons7NlmUYwIasQ",
-  "authDomain": "project-1d564.firebaseapp.com",
-  "projectId": "project-1d564",
-  "storageBucket": "project-1d564.appspot.com",
-  "messagingSenderId": "762574644488",
-  "appId": "1:762574644488:web:86ee4fe8b62a17386bf8bd"
+  "type": "service_account",
+  "project_id": "apms-python-server",
+  "private_key_id": "0b3bb51b8e3ee16218815b35adbc9764c1ff2b7a",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCsFgTakO+imDkT\npqgDnayEATDUrCbt/eu1pBJCazZBm2rzVbQvn/b5XU0ux7ngSNTlYUfAP60cTPjE\noVLqBRprCl8Vq7dbXVhpgmCbuCkxqHoT/kWxWqUNtHLpRq2iIs7T22269PpSIZQ6\nEyBVUqig33vBv9MTDlVkHdKg6Lb7KwOGIQb3JnuKUW5nqN6FMv3SH0d56wehs1I9\nB6OWetgapsd0CyDumx+5pWKW7oLivpz7UD5V75//iOUus30iKBBw5EdXSJk9uZbx\ndgUEa2oHlFfKXnXL7+azuBf+PgbtRdywCEynvsECd0IWWeOwSu8LgMJpL54YNcTn\nk/DVBUMVAgMBAAECggEABWM+bVNf//YGb3GRIrqDMLIoLmMMvaMXXUf7lF3D70OS\nPSJqnO/EAo75FXpbp5nQJIr/p+q2ckOMqadSr7tPgO4XB61+dPCpYyBEWGETKm1X\nvnGAYBWc7klp1u4yDc32LhbZdXgpsCbspkbRWn/XLLY31ds6HLIfBUk+aMWbGPuf\ndZAT4d1Q7C6cOJJyvyAwRO6z/4S6Zxx5FbEO5/u8Aey/3LomfjenVrpaNIZKiJpC\nc2bI/K7q1ZvGfbWWXPnxzRvBKu13/nJmqczt8wcvCfFI72RihYJ6JCluMtrKeRmT\njI3UbH5lYiBxm/6yePShU5Pkq0ElbJxQ+S5W97o3rwKBgQDWMIldJl7CIDEOFRRe\nkzvvcEm/IWIiKmKG9Q8PYp/cgrHGSxwjB4DwXek25+iK6vuvdroZygIUfqSfJR25\nK6od+XwXN/J64MOqrI5kxxroIuGM7+fYwrlefJOAdQgzgc4qQnUIzWf+uuyKl0kQ\nj/1vF+aU8y6h5qU8Ybg3el2pRwKBgQDNrXxd/EyF7YWy39tjx8KwKxtOd9f8wUv8\npbcVycP8PThCamnhTl6svhw/yVQl+nLsz8U8Nu6qZpgHYsMxNXCapSB++Q7DEL3O\nTNDd0Sq8hJEpjMGb3SZbIvaiBbp+sjmLcWqisopC3ofmn8dXYWBd4ptKXhew7Wl9\n4GD/ZvEewwKBgAocpH+HTjXv+yDlEd8dKFk3fePOGanvQlOIwjtBtrZcXTQ1W5Cz\ny/yNEnOLI0lbqqIwAr0w8kQxbmgtAmg5jYB4xMj71TDD57jpCJftZnHLI8bZlKKB\nHus9CmGoJMj5udf45zmRKPW3sW8hkUt84MQb5sDlcjAmiWp+WooT9tQFAoGAZUCd\ntAsLhPcMVaW8dF+X6XAfLj7zVlu2U7ck7ZX5ZIii1Jdcbm1NUE76yzAKu/OSdiBG\nocENN1fwSdqF6wi62XanC7sCWGc6eX/5Zumc11ePutuvSFLTmhQZRGP7jnmguJPq\nAhRQ2mCAmLlZwhuO/EkdV7wAf7owr6YxOipsU08CgYEAyGR++ASK/MZC7Vn1C3+z\nmBBJpmaDC1MqVXj0lo2WT4EgM6YJ+5cNG0avybp6jeBan1PiKDHsTkVlyRyjlrse\nC3b2Wshgt6CNLYuA1W9GRbOr37A8IcxzmSJ5Jz9wvBXFMMWWidASRPR0HlI2TsQw\nHzJr5LxVZezyTMDsIQskAsw=\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-wrc8e@apms-python-server.iam.gserviceaccount.com",
+  "client_id": "108832726972425569550",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-wrc8e%40apms-python-server.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
 }
