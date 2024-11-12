@@ -8,19 +8,22 @@ from aiortc.contrib.media import MediaRelay, MediaRecorder
 from aiortc.sdp import candidate_from_sdp
 import threading
 import signal
+import logging
+
+#logging.basicConfig(level=logging.DEBUG)
 
 cred = credentials.Certificate("opencv-visualizer/firebaseKey.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
-pc = RTCPeerConnection()
 relay = MediaRelay()
 clip_length = 15
 stop_event = asyncio.Event()
 
 async def run():
     call_id = input("Enter Call ID: ")
+    pc = RTCPeerConnection()  # Move pc creation here
 
     call_doc_ref = db.collection('calls').document(call_id)
     call_doc = call_doc_ref.get()
@@ -36,6 +39,38 @@ async def run():
         stop_event.set()
         return
     offer_desc = RTCSessionDescription(sdp=offer['sdp'], type=offer['type'])
+
+    # Register event handlers before setting the remote description
+    @pc.on('icecandidate')
+    def on_icecandidate(event):
+        print(f"Local ICE candidate: {event.candidate}")
+        if event.candidate:
+            candidate_dict = {
+                'candidate': event.candidate.to_sdp(),
+                'sdpMid': event.candidate.sdpMid,
+                'sdpMLineIndex': event.candidate.sdpMLineIndex,
+            }
+            answer_candidates_ref.add(candidate_dict)
+
+    @pc.on('track')
+    def on_track(track):
+        print(f"Track received: {track.kind}")
+        if track.kind == 'video':
+            local_video = relay.subscribe(track)
+            print("Starting display_video coroutine")
+            asyncio.ensure_future(display_video(local_video, pc))
+            print("Starting record_video coroutine")
+            asyncio.ensure_future(record_video(local_video))
+
+    @pc.on('connectionstatechange')
+    async def on_connectionstatechange():
+        print("Connection state is %s" % pc.connectionState)
+        if pc.connectionState == 'connected':
+            print("ICE Connection established")
+        if pc.connectionState in ['failed', 'disconnected', 'closed']:
+            await pc.close()
+            stop_event.set()
+
     await pc.setRemoteDescription(offer_desc)
 
     answer = await pc.createAnswer()
@@ -45,24 +80,16 @@ async def run():
         'type': pc.localDescription.type,
         'sdp': pc.localDescription.sdp
     }
+    print("Answer SDP: ", answer_dict['sdp'])
     call_data['answer'] = answer_dict
     call_doc_ref.set(call_data)
 
     answer_candidates_ref = call_doc_ref.collection('answerCandidates')
     offer_candidates_ref = call_doc_ref.collection('offerCandidates')
 
-    @pc.on('icecandidate')
-    def on_icecandidate(event):
-        if event.candidate:
-            candidate_dict = {
-                'candidate': event.candidate.to_sdp(),
-                'sdpMid': event.candidate.sdpMid,
-                'sdpMLineIndex': event.candidate.sdpMLineIndex,
-            }
-            answer_candidates_ref.add(candidate_dict)
-
     def on_offer_candidate_snapshot(col_snapshot, changes, read_time):
         for change in changes:
+            print(f"Received remote ICE candidate: {change.document.to_dict()}")
             if change.type.name == 'ADDED':
                 data = change.document.to_dict()
                 candidate_sdp = data['candidate']
@@ -78,31 +105,15 @@ async def run():
 
     offer_candidates_ref.on_snapshot(on_offer_candidate_snapshot)
 
-    @pc.on('track')
-    def on_track(track):
-        print("Track received: ", track.kind)
-        if track.kind == 'video':
-            local_video = relay.subscribe(track)
-            print("Starting display_video coroutine")
-            asyncio.ensure_future(display_video(local_video))
-            print("Starting record_video coroutine")
-            asyncio.ensure_future(record_video(local_video))
-
-    @pc.on('connectionstatechange')
-    async def on_connectionstatechange():
-        print("Connection state is %s" % pc.connectionState)
-        if pc.connectionState in ['failed', 'disconnected', 'closed']:
-            await pc.close()
-            stop_event.set()
-
     await stop_event.wait()
 
-async def display_video(track):
+async def display_video(track, pc):
     while True:
         frame = await track.recv()
         img = frame.to_ndarray(format="bgr24")
         cv2.imshow('Remote Video', img)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        key = cv2.waitKey(1)
+        if key == 27 or cv2.getWindowProperty('Remote Video', cv2.WND_PROP_VISIBLE) < 1:
             print("Exiting display_video coroutine")
             break
 
