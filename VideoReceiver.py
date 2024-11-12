@@ -8,9 +8,6 @@ from aiortc.contrib.media import MediaRelay, MediaRecorder
 from aiortc.sdp import candidate_from_sdp
 import threading
 import signal
-import logging
-
-#logging.basicConfig(level=logging.DEBUG)
 
 cred = credentials.Certificate("opencv-visualizer/firebaseKey.json")
 firebase_admin.initialize_app(cred)
@@ -80,7 +77,6 @@ async def run():
         'type': pc.localDescription.type,
         'sdp': pc.localDescription.sdp
     }
-    print("Answer SDP: ", answer_dict['sdp'])
     call_data['answer'] = answer_dict
     call_doc_ref.set(call_data)
 
