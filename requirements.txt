@@ -1,3 +1,5 @@
 opencv-python
 aiortc
 firebase-admin
+torch
+ultralytics
