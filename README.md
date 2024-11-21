@@ -1,2 +1,2 @@
-# OpenCV-Visualizer
-Receives a video stream from the web-app and renders it using OpenCV
+# back-end
+Receives a video stream from web-app (streamer), manippulates the video, then returns it to web-app (viewer)
