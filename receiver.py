@@ -20,7 +20,7 @@ stop_event = asyncio.Event()
 
 async def run():
     call_id = input("Enter Call ID: ")
-    pc = RTCPeerConnection()  # Move pc creation here
+    pc = RTCPeerConnection()
 
     call_doc_ref = db.collection('calls').document(call_id)
     call_doc = call_doc_ref.get()
@@ -37,7 +37,6 @@ async def run():
         return
     offer_desc = RTCSessionDescription(sdp=offer['sdp'], type=offer['type'])
 
-    # Register event handlers before setting the remote description
     @pc.on('icecandidate')
     def on_icecandidate(event):
         print(f"Local ICE candidate: {event.candidate}")
