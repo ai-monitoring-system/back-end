@@ -8,7 +8,11 @@ from aiortc.contrib.media import MediaRelay
 from aiortc.sdp import candidate_from_sdp
 from display import process_frame
 
-cred = credentials.Certificate("back-end/firebaseKey.json")
+import os
+base_dir = os.path.dirname(os.path.abspath(__file__))
+key_path = os.path.join(base_dir, "firebaseKey.json")
+cred = credentials.Certificate(key_path)
+
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 loop = asyncio.new_event_loop()

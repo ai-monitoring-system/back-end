@@ -3,7 +3,10 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-model = YOLO('back-end/models/yolo11n.pt')
+import os
+base_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(base_dir, "models", "yolo11n.pt")
+model = YOLO(model_path)
 
 def process_frame(img):
     results = model(img)
