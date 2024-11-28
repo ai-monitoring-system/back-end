@@ -13,7 +13,7 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 key_path = os.path.join(base_dir, "firebaseKey.json")
 cred = credentials.Certificate(key_path)
 
-firebase_admin.initialize_app(cred)
+#firebase_admin.initialize_app(cred)
 db = firestore.client()
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)

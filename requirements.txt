@@ -3,3 +3,4 @@ aiortc
 firebase-admin
 torch
 ultralytics
+janus
