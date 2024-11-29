@@ -86,7 +86,7 @@ async def run():
 
     def on_offer_candidate_snapshot(col_snapshot, changes, read_time):
         for change in changes:
-            print(f"Received remote ICE candidate: {change.document.to_dict()}")
+            #print(f"Received remote ICE candidate: {change.document.to_dict()}")
             if change.type.name == 'ADDED':
                 data = change.document.to_dict()
                 candidate_sdp = data['candidate']

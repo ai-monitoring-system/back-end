@@ -9,6 +9,7 @@ from av import VideoFrame
 import os
 import janus
 import threading
+import numpy as np
 
 # Initialize Firebase
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +30,7 @@ frame_queue = None
 
 # Threading event to signal when frame_queue is ready
 frame_queue_ready = threading.Event()
+
 
 # Define the VideoStreamTrack subclass
 class FrameSenderTrack(MediaStreamTrack):
@@ -54,6 +56,31 @@ def send_frame(img):
         frame_queue_ready.wait()
     frame = VideoFrame.from_ndarray(img, format='bgr24')
     transmit_frame(frame)
+
+async def test_stream_green_screen():
+    """Function to send a green screen through the video stream."""
+    # Wait until frame_queue is initialized
+    if not frame_queue_ready.is_set():
+        frame_queue_ready.wait()
+
+    # Generate a green screen (BGR format, pure green)
+    height, width = 480, 640  # Common video resolution
+    green_screen = (0, 255, 0)  # Pure green in BGR
+    img = cv2.rectangle(
+        np.zeros((height, width, 3), dtype=np.uint8),
+        (0, 0),
+        (width, height),
+        color=green_screen,
+        thickness=-1
+    )
+
+    print("Streaming the green screen...")
+    while not stop_event.is_set():
+        # Create a VideoFrame from the green screen
+        frame = VideoFrame.from_ndarray(img, format='bgr24')
+        transmit_frame(frame)
+        await asyncio.sleep(1 / 30)  # Simulate 30 FPS
+
 
 async def run():
     global frame_queue
@@ -144,8 +171,8 @@ async def run():
 
     answer_listener = call_doc_ref.on_snapshot(on_answer_snapshot)
 
-    # Wait until the connection is closed
-    await stop_event.wait()
+    # Start the static image stream test
+    await asyncio.gather(test_stream_green_screen(), stop_event.wait())
 
     # Close the Janus queue properly
     await frame_queue.async_q.join()

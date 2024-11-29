@@ -2,7 +2,7 @@ import torch
 import cv2
 import numpy as np
 from ultralytics import YOLO
-from receiver import send_frame
+from transmitter import send_frame
 
 import os
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,6 +24,7 @@ def process_frame(img):
 
 
     send_frame(img)
+    print("Frame sent")
     cv2.imshow('Remote Video', img)
     key = cv2.waitKey(1)
 
