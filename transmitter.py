@@ -3,7 +3,7 @@ import signal
 import cv2
 import firebase_admin
 from firebase_admin import credentials, firestore
-from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
+from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, RTCConfiguration, RTCIceServer
 from aiortc.sdp import candidate_from_sdp
 from av import VideoFrame
 import os
@@ -21,16 +21,15 @@ db = firestore.client()
 # Create an asyncio event loop
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
-
-# Async event to control shutdown
 stop_event = asyncio.Event()
-
-# Create a global reference for frame_queue
 frame_queue = None
-
-# Threading event to signal when frame_queue is ready
 frame_queue_ready = threading.Event()
 
+# Define the ICE servers
+ice_servers = [
+    RTCIceServer(urls="stun:stun1.l.google.com:19302"),
+    RTCIceServer(urls="stun:stun2.l.google.com:19302"),
+]
 
 # Define the VideoStreamTrack subclass
 class FrameSenderTrack(MediaStreamTrack):
@@ -47,15 +46,19 @@ class FrameSenderTrack(MediaStreamTrack):
 
 # Define the transmit_frame function
 def transmit_frame(frame):
+    #print("Transmitting frame...")
     frame_queue.sync_q.put(frame)
+    #print("Frame transmitted")
 
 # Define the send_frame function to be imported in process_frame
 def send_frame(img):
     # Wait until frame_queue is initialized
+    print("Sending frame...")
     if not frame_queue_ready.is_set():
         frame_queue_ready.wait()
     frame = VideoFrame.from_ndarray(img, format='bgr24')
     transmit_frame(frame)
+    print("Frame sent")
 
 async def test_stream_green_screen():
     """Function to send a green screen through the video stream."""
@@ -79,7 +82,7 @@ async def test_stream_green_screen():
         # Create a VideoFrame from the green screen
         frame = VideoFrame.from_ndarray(img, format='bgr24')
         transmit_frame(frame)
-        await asyncio.sleep(1 / 30)  # Simulate 30 FPS
+        await asyncio.sleep(1)  # Simulate 1 FPS
 
 
 async def run():
@@ -94,7 +97,8 @@ async def run():
     call_id = call_doc_ref.id
     print(f"Your call ID is: {call_id}")
 
-    pc = RTCPeerConnection()
+    rtc_configuration = RTCConfiguration(iceServers=ice_servers)
+    pc = RTCPeerConnection(rtc_configuration)
 
     # Add the video track to the RTCPeerConnection
     video_track = FrameSenderTrack(frame_queue)
