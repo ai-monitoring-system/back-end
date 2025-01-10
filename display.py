@@ -10,7 +10,7 @@ model_path = os.path.join(base_dir, "models", "yolo11n.pt")
 model = YOLO(model_path, verbose=False)
 
 def process_frame(img):
-    results = model(img)
+    results = model(img, verbose=False)
     
     for result in results:
         for box in result.boxes:
@@ -24,7 +24,7 @@ def process_frame(img):
 
 
     send_frame(img)
-    print("Frame sent")
+    #print("Frame sent")
     cv2.imshow('Remote Video', img)
     key = cv2.waitKey(1)
 
