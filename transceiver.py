@@ -11,51 +11,21 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.sdp import candidate_from_sdp
 from av import VideoFrame
 
-##############################################################################
-# Global variables
-##############################################################################
+from display import process_frame
 
-# This event is used to gracefully shut down when needed
 stop_event = asyncio.Event()
-
-# We'll define this at the top so handle_inbound_video can reference it
 processed_video_track = None
-
-# We also want to store our "main loop" so the Firestore callbacks
-# can schedule coroutines on it, rather than calling get_event_loop().
 MAIN_LOOP = None
 
-##############################################################################
-# YOLO or custom inference function
-##############################################################################
-
 def run_yolo_inference(img: np.ndarray) -> np.ndarray:
-    """
-    Replace this with your YOLO logic. This dummy function just
-    draws a red rectangle to show 'processed' data.
-    """
-    h, w = img.shape[:2]
-    cv2.rectangle(img, (10, 10), (w - 10, h - 10), (0, 0, 255), 2)
-    return img
-
-##############################################################################
-# Outbound track for processed frames
-##############################################################################
+    return process_frame(img)
 
 class ProcessedVideoStreamTrack(VideoStreamTrack):
-    """
-    A custom video stream track which sends frames provided
-    by handle_inbound_video(...) after YOLO processing.
-    """
     def __init__(self):
         super().__init__()
         self.frame_queue = asyncio.Queue()
 
     async def recv(self):
-        """
-        Called by aiortc when it needs the next frame to send.
-        We'll wait until a processed frame is pushed into frame_queue.
-        """
         frame_ndarray = await self.frame_queue.get()
 
         av_frame = VideoFrame.from_ndarray(frame_ndarray, format="bgr24")
@@ -63,20 +33,12 @@ class ProcessedVideoStreamTrack(VideoStreamTrack):
         return av_frame
 
     def push_frame(self, frame_ndarray: np.ndarray):
-        """Called externally to place a new processed frame into the queue."""
         self.frame_queue.put_nowait(frame_ndarray)
-
-##############################################################################
-# Main async function
-##############################################################################
 
 async def main():
     global MAIN_LOOP
     MAIN_LOOP = asyncio.get_event_loop()
 
-    ############################################################################
-    # 0) Initialize Firebase
-    ############################################################################
     base_dir = os.path.dirname(os.path.abspath(__file__))
     key_path = os.path.join(base_dir, "firebaseKey.json")
 
@@ -88,14 +50,10 @@ async def main():
         firebase_admin.initialize_app(cred)
 
     db = firestore.client()
-
-    ############################################################################
-    # 1) Set up pc_in: Answerer for inbound call from Web App A
-    ############################################################################
     pc_in = RTCPeerConnection()
 
     # Prompt for the inbound call ID (already created by Web App A)
-    call_id_in = input("Enter Call ID for inbound call (from Web App A): ")
+    call_id_in = input("Inbound call ID: ")
     call_doc_ref_in = db.collection("calls").document(call_id_in)
     call_doc_in = call_doc_ref_in.get()
     if not call_doc_in.exists:
@@ -133,7 +91,7 @@ async def main():
 
     @pc_in.on("track")
     def on_in_track(track):
-        print(f"pc_in got track: {track.kind}")
+        #print(f"pc_in got track: {track.kind}")
         if track.kind == "video":
             # Launch a coroutine to handle inbound frames
             asyncio.ensure_future(handle_inbound_video(track, pc_in))
@@ -171,16 +129,12 @@ async def main():
     }
     call_doc_ref_in.set(call_data_in)
 
-    ############################################################################
-    # 2) Set up pc_out: Caller for outbound call to Web App B
-    ############################################################################
     pc_out = RTCPeerConnection()
 
     # Create a brand new Firestore doc for the outbound call
     call_doc_ref_out = db.collection("calls").document()
     call_id_out = call_doc_ref_out.id
-    print(f"\nNew Call ID for outbound call (to Web App B): {call_id_out}")
-    print("Share this callIdOut with Web App B, which will act as answerer.\n")
+    print(f"Outbound Call ID: {call_id_out}")
 
     @pc_out.on("icecandidate")
     def on_out_icecandidate(event):
@@ -257,20 +211,12 @@ async def main():
 
     call_doc_ref_out.collection("answerCandidates").on_snapshot(on_out_answer_candidate_snapshot)
 
-    ############################################################################
-    # Wait until something triggers the stop_event (Ctrl+C or connection failure)
-    ############################################################################
     await stop_event.wait()
     print("Stop event triggered - shutting down...")
 
     # Clean up
     await pc_in.close()
     await pc_out.close()
-    cv2.destroyAllWindows()
-
-##############################################################################
-# Coroutine to handle inbound frames from pc_in
-##############################################################################
 
 async def handle_inbound_video(track, pc_in):
     global processed_video_track
@@ -282,40 +228,17 @@ async def handle_inbound_video(track, pc_in):
             print("Error receiving frame:", e)
             break
 
-        # Convert to NumPy BGR
         img = frame.to_ndarray(format="bgr24")
-
-        # YOLO or other processing
         processed_img = run_yolo_inference(img)
-
-        # Optionally show both raw and processed in local windows
-        cv2.imshow("Inbound (A)", img)
-        cv2.imshow("Processed for B", processed_img)
-        key = cv2.waitKey(1)
-        if key == 27:  # ESC
-            print("ESC pressed - stopping inbound loop.")
-            stop_event.set()
-            break
-
-        # Push processed frame to outbound track
         processed_video_track.push_frame(processed_img)
 
     # Cleanup if the loop ends
     await pc_in.close()
-    cv2.destroyAllWindows()
     stop_event.set()
-
-##############################################################################
-# Signal handler for Ctrl+C
-##############################################################################
 
 def signal_handler(sig, frame):
     print("Signal received, shutting down...")
     stop_event.set()
-
-##############################################################################
-# Entry point
-##############################################################################
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
