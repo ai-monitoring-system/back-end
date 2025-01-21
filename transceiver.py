@@ -33,6 +33,8 @@ class ProcessedVideoStreamTrack(VideoStreamTrack):
         return av_frame
 
     def push_frame(self, frame_ndarray: np.ndarray):
+        if self.frame_queue.qsize() >= 60:
+            self.frame_queue.get_nowait()
         self.frame_queue.put_nowait(frame_ndarray)
 
 async def main():
