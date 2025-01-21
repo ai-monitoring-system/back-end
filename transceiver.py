@@ -54,12 +54,12 @@ async def main():
     db = firestore.client()
     pc_in = RTCPeerConnection()
 
-    # Prompt for the inbound call ID (already created by Web App A)
-    call_id_in = input("Inbound call ID: ")
-    call_doc_ref_in = db.collection("calls").document(call_id_in)
+    # Prompt for the user ID once
+    user_id = input("User ID: ")
+    call_doc_ref_in = db.collection("calls").document(user_id)
     call_doc_in = call_doc_ref_in.get()
     if not call_doc_in.exists:
-        print(f"Inbound call ID {call_id_in} not found in Firestore.")
+        print(f"Inbound call ID {user_id} not found in Firestore.")
         return
 
     call_data_in = call_doc_in.to_dict()
@@ -133,9 +133,9 @@ async def main():
 
     pc_out = RTCPeerConnection()
 
-    # Create a brand new Firestore doc for the outbound call
-    call_doc_ref_out = db.collection("calls").document()
-    call_id_out = call_doc_ref_out.id
+    # Use the same Firestore doc for the outbound call
+    call_doc_ref_out = call_doc_ref_in
+    call_id_out = user_id
     print(f"Outbound Call ID: {call_id_out}")
 
     @pc_out.on("icecandidate")

@@ -19,4 +19,7 @@ def process_frame(img):
             cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
             cv2.putText(img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
+    # cv2.imshow("Processed Frame", img)
+    # cv2.waitKey(1)
+
     return img
