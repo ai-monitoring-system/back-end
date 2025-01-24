@@ -135,8 +135,6 @@ async def main():
 
     # Use the same Firestore doc for the outbound call
     call_doc_ref_out = call_doc_ref_in
-    call_id_out = user_id
-    print(f"Outbound Call ID: {call_id_out}")
 
     @pc_out.on("icecandidate")
     def on_out_icecandidate(event):
