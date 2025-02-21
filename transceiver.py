@@ -17,8 +17,28 @@ stop_event = asyncio.Event()
 processed_video_track = None
 MAIN_LOOP = None
 
-def run_yolo_inference(img: np.ndarray) -> np.ndarray:
+
+user_id = None
+db = None
+
+def run_yolo_inference(img: np.ndarray):
     return process_frame(img)
+
+def handle_person_detected():
+    """
+    This function writes a notification doc in Firestore indicating a person was detected.
+    Since we declared user_id globally, we can just read it here.
+    """
+    global user_id, db  # We'll also need db accessible
+    print(f"handle_person_detected: user_id = {user_id}")
+
+    data = {
+        "userId": user_id,
+        "type": "personDetected",
+        "timestamp": firestore.SERVER_TIMESTAMP
+    }
+    db.collection("notifications").add(data)
+    print("Wrote personDetected notification to Firestore:", data)
 
 class ProcessedVideoStreamTrack(VideoStreamTrack):
     def __init__(self):
@@ -250,7 +270,14 @@ async def handle_inbound_video(track, pc_in):
             break
 
         img = frame.to_ndarray(format="bgr24")
-        processed_img = run_yolo_inference(img)
+        processed_img, found_person = run_yolo_inference(img)
+
+        # If a person was detected, write the "notifications" doc
+        if found_person:
+            # e.g., call a helper that writes to Firestore
+            handle_person_detected(user_id)  # define this below or above
+
+        # Continue streaming the processed frame
         processed_video_track.push_frame(processed_img)
 
     # Cleanup if the loop ends
