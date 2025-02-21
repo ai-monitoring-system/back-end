@@ -57,6 +57,10 @@ async def main():
     # Prompt for the user ID once
     user_id = input("User ID: ")
     call_doc_ref_in = db.collection("calls").document(user_id)
+
+    # Clear any previous call session data
+    call_doc_ref_in.set({}, merge=True)  # Clears existing fields but keeps the document
+
     call_doc_in = call_doc_ref_in.get()
     if not call_doc_in.exists:
         print(f"Inbound call ID {user_id} not found in Firestore.")
@@ -217,6 +221,23 @@ async def main():
     # Clean up
     await pc_in.close()
     await pc_out.close()
+
+    # Clean up Firestore doc & sub-collections
+    try:
+        # Delete sub-collections first (offerCandidates, answerCandidates)
+        offer_candidates = call_doc_ref_in.collection("offerCandidates").stream()
+        answer_candidates = call_doc_ref_in.collection("answerCandidates").stream()
+        
+        for candidate in offer_candidates:
+            candidate.reference.delete()
+        
+        for candidate in answer_candidates:
+            candidate.reference.delete()
+
+        # Now delete the main doc
+        call_doc_ref_in.delete()
+    except Exception as e:
+        print(f"Error deleting old call data: {e}")
 
 async def handle_inbound_video(track, pc_in):
     global processed_video_track
