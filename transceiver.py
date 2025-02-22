@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, messaging
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.sdp import candidate_from_sdp
@@ -17,29 +17,76 @@ stop_event = asyncio.Event()
 processed_video_track = None
 MAIN_LOOP = None
 
-
+###############################################################################
+# GLOBALS
+###############################################################################
 user_id = None
 db = None
 
+###############################################################################
+# YOLO & Firestore Helpers
+###############################################################################
 def run_yolo_inference(img: np.ndarray):
-    return process_frame(img)
+    """
+    run_yolo_inference calls process_frame(img),
+    which returns (processed_img, found_person).
+    """
+    return process_frame(img)  # e.g. returns (img_with_boxes, bool_found_person)
 
 def handle_person_detected():
     """
-    This function writes a notification doc in Firestore indicating a person was detected.
-    Since we declared user_id globally, we can just read it here.
+    Fetches the user's FCM tokens from Firestore and sends an FCM push notification
+    directly from Python instead of using Firebase Cloud Functions.
     """
-    global user_id, db  # We'll also need db accessible
-    print(f"handle_person_detected: user_id = {user_id}")
+    global user_id, db
 
+    if not user_id or not db:
+        print("Warning: user_id or db not set - cannot send notification.")
+        return
+
+    # Fetch FCM tokens from Firestore
+    user_ref = db.collection("users").document(user_id)
+    user_doc = user_ref.get()
+
+    if not user_doc.exists:
+        print(f"No user found for ID: {user_id}")
+        return
+
+    user_data = user_doc.to_dict()
+    tokens = user_data.get("fcmTokens", [])
+
+    if not tokens:
+        print(f"No FCM tokens found for user ID: {user_id}")
+        return
+
+    # Create the push notification message
+    message = messaging.MulticastMessage(
+        notification=messaging.Notification(
+            title="🚨 Person Detected!",
+            body="A person was detected on camera. Check your feed!",
+        ),
+        tokens=tokens,
+    )
+
+    # Send FCM notification
+    try:
+        response = messaging.send_multicast(message)
+        print(f"FCM Message sent: {response.success_count} notifications sent successfully.")
+    except Exception as e:
+        print(f"Error sending FCM notification: {e}")
+
+    # Log detection in Firestore (optional)
     data = {
         "userId": user_id,
         "type": "personDetected",
         "timestamp": firestore.SERVER_TIMESTAMP
     }
     db.collection("notifications").add(data)
-    print("Wrote personDetected notification to Firestore:", data)
+    print("Wrote personDetected event to Firestore:", data)
 
+###############################################################################
+# Video Stream Track
+###############################################################################
 class ProcessedVideoStreamTrack(VideoStreamTrack):
     def __init__(self):
         super().__init__()
@@ -57,8 +104,11 @@ class ProcessedVideoStreamTrack(VideoStreamTrack):
             self.frame_queue.get_nowait()
         self.frame_queue.put_nowait(frame_ndarray)
 
+###############################################################################
+# Main Entry
+###############################################################################
 async def main():
-    global MAIN_LOOP
+    global MAIN_LOOP, user_id, db
     MAIN_LOOP = asyncio.get_event_loop()
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -71,7 +121,13 @@ async def main():
         cred = credentials.Certificate(key_path)
         firebase_admin.initialize_app(cred)
 
+    # Set the global db
     db = firestore.client()
+
+    # Prompt for the user ID once, store it in the global user_id
+    user_id = input("User ID: ")
+    print(f"Using user_id = {user_id}")
+
     pc_in = RTCPeerConnection()
 
     # Prompt for the user ID once
@@ -259,6 +315,9 @@ async def main():
     except Exception as e:
         print(f"Error deleting old call data: {e}")
 
+###############################################################################
+# Handling inbound video frames
+###############################################################################
 async def handle_inbound_video(track, pc_in):
     global processed_video_track
 
@@ -270,20 +329,24 @@ async def handle_inbound_video(track, pc_in):
             break
 
         img = frame.to_ndarray(format="bgr24")
+
+        # run_yolo_inference returns (processed_img, found_person)
         processed_img, found_person = run_yolo_inference(img)
 
         # If a person was detected, write the "notifications" doc
         if found_person:
-            # e.g., call a helper that writes to Firestore
-            handle_person_detected(user_id)  # define this below or above
+            handle_person_detected()
 
-        # Continue streaming the processed frame
+        # Continue streaming the processed frame out
         processed_video_track.push_frame(processed_img)
 
     # Cleanup if the loop ends
     await pc_in.close()
     stop_event.set()
 
+###############################################################################
+# Signal Handling for graceful shutdown
+###############################################################################
 def signal_handler(sig, frame):
     print("Signal received, shutting down...")
     stop_event.set()
