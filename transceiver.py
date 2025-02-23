@@ -3,6 +3,7 @@ import signal
 import os
 import cv2
 import numpy as np
+import time  # Add this import for tracking time
 
 import firebase_admin
 from firebase_admin import credentials, firestore, messaging
@@ -22,6 +23,8 @@ MAIN_LOOP = None
 ###############################################################################
 user_id = None
 db = None
+last_notification_time = 0  # Track the last time a notification was sent
+NOTIFICATION_COOLDOWN = 5  # Cooldown period in seconds
 
 ###############################################################################
 # YOLO & Firestore Helpers
@@ -38,7 +41,12 @@ def handle_person_detected():
     Fetches the user's FCM tokens from Firestore and sends an FCM push notification
     directly from Python instead of using Firebase Cloud Functions.
     """
-    global user_id, db
+    global user_id, db, last_notification_time
+
+    # Check if the cooldown period has passed
+    current_time = time.time()
+    if current_time - last_notification_time < NOTIFICATION_COOLDOWN:
+        return
 
     if not user_id or not db:
         print("Warning: user_id or db not set - cannot send notification.")
@@ -60,20 +68,22 @@ def handle_person_detected():
         return
 
     # Create the push notification message
-    message = messaging.MulticastMessage(
-        notification=messaging.Notification(
-            title="🚨 Person Detected!",
-            body="A person was detected on camera. Check your feed!",
-        ),
-        tokens=tokens,
+    notification = messaging.Notification(
+        title="🚨 Person Detected!",
+        body="A person was detected on camera. Check your feed!",
     )
 
-    # Send FCM notification
-    try:
-        response = messaging.send_multicast(message)
-        print(f"FCM Message sent: {response.success_count} notifications sent successfully.")
-    except Exception as e:
-        print(f"Error sending FCM notification: {e}")
+    # Send FCM notification to each token individually
+    for token in tokens:
+        message = messaging.Message(
+            notification=notification,
+            token=token,
+        )
+        try:
+            response = messaging.send(message)
+            print(f"FCM Message sent to {token}: {response}")
+        except Exception as e:
+            print(f"Error sending FCM notification to {token}: {e}")
 
     # Log detection in Firestore (optional)
     data = {
@@ -83,6 +93,9 @@ def handle_person_detected():
     }
     db.collection("notifications").add(data)
     print("Wrote personDetected event to Firestore:", data)
+
+    # Update the last notification time
+    last_notification_time = current_time
 
 ###############################################################################
 # Video Stream Track
