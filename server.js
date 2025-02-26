@@ -13,7 +13,7 @@ app.post('/start-transceiver', (req, res) => {
   const { userId } = req.body;
   console.log('Starting transceiver with userId:', userId);
 
-  const pythonProcess = spawn('python', ['transceiver.py', userId]);
+  const pythonProcess = spawn('python', ['-u', 'transceiver.py', userId]);
 
   pythonProcess.stdout.on('data', (data) => {
     console.log(`transceiver stdout: ${data}`);
