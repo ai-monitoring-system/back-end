@@ -143,8 +143,6 @@ async def main():
 
     pc_in = RTCPeerConnection()
 
-    # Prompt for the user ID once
-    user_id = input("User ID: ")
     call_doc_ref_in = db.collection("calls").document(user_id)
 
     # Clear any previous call session data
