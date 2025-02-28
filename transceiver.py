@@ -1,3 +1,4 @@
+import sys
 import asyncio
 import signal
 import os
@@ -107,7 +108,6 @@ class ProcessedVideoStreamTrack(VideoStreamTrack):
 
     async def recv(self):
         frame_ndarray = await self.frame_queue.get()
-
         av_frame = VideoFrame.from_ndarray(frame_ndarray, format="bgr24")
         av_frame.pts, av_frame.time_base = await self.next_timestamp()
         return av_frame
@@ -127,7 +127,7 @@ async def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     key_path = os.path.join(base_dir, "firebaseKey.json")
 
-    # Initialize Firebase only once
+    # Initialize Firebase once
     try:
         firebase_admin.get_app()
     except ValueError:
@@ -143,20 +143,28 @@ async def main():
 
     pc_in = RTCPeerConnection()
 
+    # Grab user ID from sys.argv instead of input prompt
+    if len(sys.argv) > 1:
+        user_id = sys.argv[1]
+    else:
+        user_id = None
+
+    print(f"Running transceiver with user_id: {user_id}", flush=True)
+
     call_doc_ref_in = db.collection("calls").document(user_id)
 
     # Clear any previous call session data
-    call_doc_ref_in.set({}, merge=True)  # Clears existing fields but keeps the document
+    call_doc_ref_in.set({}, merge=True)
 
     call_doc_in = call_doc_ref_in.get()
     if not call_doc_in.exists:
-        print(f"Inbound call ID {user_id} not found in Firestore.")
+        print(f"Inbound call ID {user_id} not found in Firestore.", flush=True)
         return
 
     call_data_in = call_doc_in.to_dict()
     offer_in = call_data_in.get("offer")
     if not offer_in:
-        print("No 'offer' found in inbound call doc.")
+        print("No 'offer' found in inbound call doc.", flush=True)
         return
 
     inbound_offer_desc = RTCSessionDescription(
@@ -167,7 +175,7 @@ async def main():
     @pc_in.on("icecandidate")
     def on_in_icecandidate(event):
         if event.candidate is not None:
-            print("pc_in local ICE candidate:", event.candidate)
+            print("pc_in local ICE candidate:", event.candidate, flush=True)
             candidate_dict = {
                 "candidate": event.candidate.to_sdp(),
                 "sdpMid": event.candidate.sdpMid,
@@ -177,16 +185,14 @@ async def main():
 
     @pc_in.on("connectionstatechange")
     async def on_in_state_change():
-        print("pc_in state:", pc_in.connectionState)
+        print("pc_in state:", pc_in.connectionState, flush=True)
         if pc_in.connectionState in ["failed", "disconnected", "closed"]:
             await pc_in.close()
             stop_event.set()
 
     @pc_in.on("track")
     def on_in_track(track):
-        #print(f"pc_in got track: {track.kind}")
         if track.kind == "video":
-            # Launch a coroutine to handle inbound frames
             asyncio.ensure_future(handle_inbound_video(track, pc_in))
 
     def on_offer_candidate_snapshot(col_snapshot, changes, read_time):
@@ -197,21 +203,14 @@ async def main():
                 candidate = candidate_from_sdp(candidate_sdp)
                 candidate.sdpMid = data["sdpMid"]
                 candidate.sdpMLineIndex = int(data["sdpMLineIndex"])
-
-                # Schedule the coroutine on the MAIN_LOOP
-                future = asyncio.run_coroutine_threadsafe(
-                    pc_in.addIceCandidate(candidate),
-                    MAIN_LOOP
-                )
+                future = asyncio.run_coroutine_threadsafe(pc_in.addIceCandidate(candidate), MAIN_LOOP)
                 try:
                     future.result()
                 except Exception as e:
-                    print("Error adding inbound ICE candidate:", e)
+                    print("Error adding inbound ICE candidate:", e, flush=True)
 
-    # Listen for inbound ICE from the "offerCandidates" sub-collection
     call_doc_ref_in.collection("offerCandidates").on_snapshot(on_offer_candidate_snapshot)
 
-    # Set remote description to inbound offer, then create & save local answer
     await pc_in.setRemoteDescription(inbound_offer_desc)
     answer_in = await pc_in.createAnswer()
     await pc_in.setLocalDescription(answer_in)
@@ -223,14 +222,12 @@ async def main():
     call_doc_ref_in.set(call_data_in)
 
     pc_out = RTCPeerConnection()
-
-    # Use the same Firestore doc for the outbound call
     call_doc_ref_out = call_doc_ref_in
 
     @pc_out.on("icecandidate")
     def on_out_icecandidate(event):
         if event.candidate is not None:
-            print("pc_out local ICE candidate:", event.candidate)
+            print("pc_out local ICE candidate:", event.candidate, flush=True)
             candidate_dict = {
                 "candidate": event.candidate.to_sdp(),
                 "sdpMid": event.candidate.sdpMid,
@@ -240,7 +237,7 @@ async def main():
 
     @pc_out.on("connectionstatechange")
     async def on_out_state_change():
-        print("pc_out state:", pc_out.connectionState)
+        print("pc_out state:", pc_out.connectionState, flush=True)
         if pc_out.connectionState in ["failed", "disconnected", "closed"]:
             await pc_out.close()
             stop_event.set()
@@ -249,11 +246,9 @@ async def main():
     processed_video_track = ProcessedVideoStreamTrack()
     pc_out.addTrack(processed_video_track)
 
-    # Create an offer for Web App B
     offer_out = await pc_out.createOffer()
     await pc_out.setLocalDescription(offer_out)
 
-    # Save the outbound offer in Firestore
     call_doc_ref_out.set({
         "offer": {
             "type": pc_out.localDescription.type,
@@ -261,7 +256,6 @@ async def main():
         }
     })
 
-    # Watch for the answer from Web App B
     def on_out_call_snapshot(doc_snapshot, changes, read_time):
         for doc in doc_snapshot:
             data = doc.to_dict()
@@ -271,14 +265,11 @@ async def main():
                     sdp=ans["sdp"],
                     type=ans["type"]
                 )
-                future = asyncio.run_coroutine_threadsafe(
-                    pc_out.setRemoteDescription(answer_desc),
-                    MAIN_LOOP
-                )
+                future = asyncio.run_coroutine_threadsafe(pc_out.setRemoteDescription(answer_desc), MAIN_LOOP)
                 try:
                     future.result()
                 except Exception as e:
-                    print("Error setting outbound remote description:", e)
+                    print("Error setting outbound remote description:", e, flush=True)
 
     call_doc_ref_out.on_snapshot(on_out_call_snapshot)
 
@@ -290,55 +281,42 @@ async def main():
                 candidate = candidate_from_sdp(candidate_sdp)
                 candidate.sdpMid = data["sdpMid"]
                 candidate.sdpMLineIndex = int(data["sdpMLineIndex"])
-
-                future = asyncio.run_coroutine_threadsafe(
-                    pc_out.addIceCandidate(candidate),
-                    MAIN_LOOP
-                )
+                future = asyncio.run_coroutine_threadsafe(pc_out.addIceCandidate(candidate), MAIN_LOOP)
                 try:
                     future.result()
                 except Exception as e:
-                    print("Error adding outbound ICE candidate:", e)
+                    print("Error adding outbound ICE candidate:", e, flush=True)
 
     call_doc_ref_out.collection("answerCandidates").on_snapshot(on_out_answer_candidate_snapshot)
 
     await stop_event.wait()
-    print("Stop event triggered - shutting down...")
+    print("Stop event triggered - shutting down...", flush=True)
 
-    # Clean up
     await pc_in.close()
     await pc_out.close()
 
-    # Clean up Firestore doc & sub-collections
     try:
-        # Delete sub-collections first (offerCandidates, answerCandidates)
         offer_candidates = call_doc_ref_in.collection("offerCandidates").stream()
         answer_candidates = call_doc_ref_in.collection("answerCandidates").stream()
-        
         for candidate in offer_candidates:
             candidate.reference.delete()
-        
         for candidate in answer_candidates:
             candidate.reference.delete()
-
-        # Now delete the main doc
         call_doc_ref_in.delete()
     except Exception as e:
-        print(f"Error deleting old call data: {e}")
+        print(f"Error deleting old call data: {e}", flush=True)
 
 ###############################################################################
 # Handling inbound video frames
 ###############################################################################
 async def handle_inbound_video(track, pc_in):
     global processed_video_track
-
     while True:
         try:
             frame = await track.recv()
         except Exception as e:
-            print("Error receiving frame:", e)
+            print("Error receiving frame:", e, flush=True)
             break
-
         img = frame.to_ndarray(format="bgr24")
 
         # run_yolo_inference returns (processed_img, found_person)
@@ -350,8 +328,6 @@ async def handle_inbound_video(track, pc_in):
 
         # Continue streaming the processed frame out
         processed_video_track.push_frame(processed_img)
-
-    # Cleanup if the loop ends
     await pc_in.close()
     stop_event.set()
 
@@ -359,14 +335,13 @@ async def handle_inbound_video(track, pc_in):
 # Signal Handling for graceful shutdown
 ###############################################################################
 def signal_handler(sig, frame):
-    print("Signal received, shutting down...")
+    print("Signal received, shutting down...", flush=True)
     stop_event.set()
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-
     try:
         loop.run_until_complete(main())
     finally:
