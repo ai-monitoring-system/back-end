@@ -137,10 +137,6 @@ async def main():
     # Set the global db
     db = firestore.client()
 
-    # Prompt for the user ID once, store it in the global user_id
-    user_id = input("User ID: ")
-    print(f"Using user_id = {user_id}")
-
     pc_in = RTCPeerConnection()
 
     # Grab user ID from sys.argv instead of input prompt
