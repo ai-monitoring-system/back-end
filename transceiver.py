@@ -70,8 +70,8 @@ def handle_person_detected():
 
     # Create the push notification message
     notification = messaging.Notification(
-        title="🚨 Person Detected!",
-        body="A person was detected on camera. Check your feed!",
+        title="🚨 Person Approaching!",
+        body="A person was detected approaching the camera!",
     )
 
     # Send FCM notification to each token individually
