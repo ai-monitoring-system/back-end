@@ -50,7 +50,7 @@ def handle_person_detected():
         return
 
     if not user_id or not db:
-        print("Warning: user_id or db not set - cannot send notification.")
+        #print("Warning: user_id or db not set - cannot send notification.")
         return
 
     # Fetch FCM tokens from Firestore
@@ -65,7 +65,7 @@ def handle_person_detected():
     tokens = user_data.get("fcmTokens", [])
 
     if not tokens:
-        print(f"No FCM tokens found for user ID: {user_id}")
+        #print(f"No FCM tokens found for user ID: {user_id}")
         return
 
     # Create the push notification message
@@ -82,9 +82,10 @@ def handle_person_detected():
         )
         try:
             response = messaging.send(message)
-            print(f"FCM Message sent to {token}: {response}")
+            #print(f"FCM Message sent to {token}: {response}")
         except Exception as e:
-            print(f"Error sending FCM notification to {token}: {e}")
+            #print(f"Error sending FCM notification to {token}: {e}")
+            print("\b")
 
     # Log detection in Firestore (optional)
     data = {
@@ -93,7 +94,7 @@ def handle_person_detected():
         "timestamp": firestore.SERVER_TIMESTAMP
     }
     db.collection("notifications").add(data)
-    print("Wrote personDetected event to Firestore:", data)
+    #print("Wrote personDetected event to Firestore:", data)
 
     # Update the last notification time
     last_notification_time = current_time

@@ -7,6 +7,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 base_dir = os.path.dirname(os.path.abspath(__file__))
 model_path = os.path.join(base_dir, "models", "yolo11n.pt")
 model = YOLO(model_path, verbose=False).to(device)
+print("Using system: " + device)
 
 def process_frame(img):
     results = model(img, verbose=False, device=device)
