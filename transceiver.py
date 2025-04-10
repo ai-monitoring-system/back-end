@@ -25,7 +25,10 @@ MAIN_LOOP = None
 user_id = None
 db = None
 last_notification_time = 0  # Track the last time a notification was sent
-NOTIFICATION_COOLDOWN = 5  # Cooldown period in seconds
+last_check_time = 0  # Track the last time a check was made
+DEFAULT_NOTIFICATION_COOLDOWN = 60  # Cooldown period in seconds
+CHECK_COOLDOWN = 1
+
 
 ###############################################################################
 # YOLO & Firestore Helpers
@@ -37,23 +40,23 @@ def run_yolo_inference(img: np.ndarray):
     """
     return process_frame(img)  # e.g. returns (img_with_boxes, bool_found_person)
 
+
 def handle_person_detected():
     """
-    Fetches the user's FCM tokens from Firestore and sends an FCM push notification
-    directly from Python instead of using Firebase Cloud Functions.
+    Fetches the user's notification settings from Firestore and sends an FCM push notification
+    only if the specified cooldown period has passed since the last notification.
     """
-    global user_id, db, last_notification_time
+    global user_id, db, last_notification_time, last_check_time
 
-    # Check if the cooldown period has passed
     current_time = time.time()
-    if current_time - last_notification_time < NOTIFICATION_COOLDOWN:
+    if current_time - last_check_time < CHECK_COOLDOWN:
         return
+    last_check_time = current_time
 
     if not user_id or not db:
-        #print("Warning: user_id or db not set - cannot send notification.")
         return
 
-    # Fetch FCM tokens from Firestore
+    # Fetch user's document from Firestore
     user_ref = db.collection("users").document(user_id)
     user_doc = user_ref.get()
 
@@ -62,10 +65,23 @@ def handle_person_detected():
         return
 
     user_data = user_doc.to_dict()
-    tokens = user_data.get("fcmTokens", [])
+    if "settings" in user_data:
+        if not user_data["settings"]["notificationsEnabled"]:
+            print("Notifications are disabled")
+            return
+        notif_cooldown = user_data["settings"]["notifCooldown"]
+        print(f"Notification cooldown: {notif_cooldown}s")
+    else:
+        notif_cooldown = DEFAULT_NOTIFICATION_COOLDOWN
+        print(f"No 'settings' found, using default cooldown: {notif_cooldown}s")
 
+    # Check if cooldown period has passed
+    if current_time - last_notification_time < notif_cooldown:
+        return
+
+    # Fetch FCM tokens from Firestore
+    tokens = user_data.get("fcmTokens", [])
     if not tokens:
-        #print(f"No FCM tokens found for user ID: {user_id}")
         return
 
     # Create the push notification message
@@ -74,7 +90,7 @@ def handle_person_detected():
         body="A person was detected approaching the camera!",
     )
 
-    # Send FCM notification to each token individually
+    # Send FCM notification to each token
     for token in tokens:
         message = messaging.Message(
             notification=notification,
@@ -82,22 +98,14 @@ def handle_person_detected():
         )
         try:
             response = messaging.send(message)
-            #print(f"FCM Message sent to {token}: {response}")
+            # Optionally print message response
+            # print(f"FCM Message sent to {token}: {response}")
         except Exception as e:
-            #print(f"Error sending FCM notification to {token}: {e}")
-            print("\b")
-
-    # Log detection in Firestore (optional)
-    data = {
-        "userId": user_id,
-        "type": "personDetected",
-        "timestamp": firestore.SERVER_TIMESTAMP
-    }
-    db.collection("notifications").add(data)
-    #print("Wrote personDetected event to Firestore:", data)
+            print(f"Error sending FCM notification to {token}: {e}")
 
     # Update the last notification time
     last_notification_time = current_time
+
 
 ###############################################################################
 # Video Stream Track
@@ -117,6 +125,7 @@ class ProcessedVideoStreamTrack(VideoStreamTrack):
         if self.frame_queue.qsize() >= 60:
             self.frame_queue.get_nowait()
         self.frame_queue.put_nowait(frame_ndarray)
+
 
 ###############################################################################
 # Main Entry
@@ -165,8 +174,7 @@ async def main():
         return
 
     inbound_offer_desc = RTCSessionDescription(
-        sdp=offer_in["sdp"],
-        type=offer_in["type"]
+        sdp=offer_in["sdp"], type=offer_in["type"]
     )
 
     @pc_in.on("icecandidate")
@@ -200,13 +208,17 @@ async def main():
                 candidate = candidate_from_sdp(candidate_sdp)
                 candidate.sdpMid = data["sdpMid"]
                 candidate.sdpMLineIndex = int(data["sdpMLineIndex"])
-                future = asyncio.run_coroutine_threadsafe(pc_in.addIceCandidate(candidate), MAIN_LOOP)
+                future = asyncio.run_coroutine_threadsafe(
+                    pc_in.addIceCandidate(candidate), MAIN_LOOP
+                )
                 try:
                     future.result()
                 except Exception as e:
                     print("Error adding inbound ICE candidate:", e, flush=True)
 
-    call_doc_ref_in.collection("offerCandidates").on_snapshot(on_offer_candidate_snapshot)
+    call_doc_ref_in.collection("offerCandidates").on_snapshot(
+        on_offer_candidate_snapshot
+    )
 
     await pc_in.setRemoteDescription(inbound_offer_desc)
     answer_in = await pc_in.createAnswer()
@@ -214,7 +226,7 @@ async def main():
 
     call_data_in["answer"] = {
         "type": pc_in.localDescription.type,
-        "sdp": pc_in.localDescription.sdp
+        "sdp": pc_in.localDescription.sdp,
     }
     call_doc_ref_in.set(call_data_in)
 
@@ -246,23 +258,24 @@ async def main():
     offer_out = await pc_out.createOffer()
     await pc_out.setLocalDescription(offer_out)
 
-    call_doc_ref_out.set({
-        "offer": {
-            "type": pc_out.localDescription.type,
-            "sdp": pc_out.localDescription.sdp
+    call_doc_ref_out.set(
+        {
+            "offer": {
+                "type": pc_out.localDescription.type,
+                "sdp": pc_out.localDescription.sdp,
+            }
         }
-    })
+    )
 
     def on_out_call_snapshot(doc_snapshot, changes, read_time):
         for doc in doc_snapshot:
             data = doc.to_dict()
             if "answer" in data:
                 ans = data["answer"]
-                answer_desc = RTCSessionDescription(
-                    sdp=ans["sdp"],
-                    type=ans["type"]
+                answer_desc = RTCSessionDescription(sdp=ans["sdp"], type=ans["type"])
+                future = asyncio.run_coroutine_threadsafe(
+                    pc_out.setRemoteDescription(answer_desc), MAIN_LOOP
                 )
-                future = asyncio.run_coroutine_threadsafe(pc_out.setRemoteDescription(answer_desc), MAIN_LOOP)
                 try:
                     future.result()
                 except Exception as e:
@@ -278,13 +291,17 @@ async def main():
                 candidate = candidate_from_sdp(candidate_sdp)
                 candidate.sdpMid = data["sdpMid"]
                 candidate.sdpMLineIndex = int(data["sdpMLineIndex"])
-                future = asyncio.run_coroutine_threadsafe(pc_out.addIceCandidate(candidate), MAIN_LOOP)
+                future = asyncio.run_coroutine_threadsafe(
+                    pc_out.addIceCandidate(candidate), MAIN_LOOP
+                )
                 try:
                     future.result()
                 except Exception as e:
                     print("Error adding outbound ICE candidate:", e, flush=True)
 
-    call_doc_ref_out.collection("answerCandidates").on_snapshot(on_out_answer_candidate_snapshot)
+    call_doc_ref_out.collection("answerCandidates").on_snapshot(
+        on_out_answer_candidate_snapshot
+    )
 
     await stop_event.wait()
     print("Stop event triggered - shutting down...", flush=True)
@@ -302,6 +319,7 @@ async def main():
         call_doc_ref_in.delete()
     except Exception as e:
         print(f"Error deleting old call data: {e}", flush=True)
+
 
 ###############################################################################
 # Handling inbound video frames
@@ -328,12 +346,14 @@ async def handle_inbound_video(track, pc_in):
     await pc_in.close()
     stop_event.set()
 
+
 ###############################################################################
 # Signal Handling for graceful shutdown
 ###############################################################################
 def signal_handler(sig, frame):
     print("Signal received, shutting down...", flush=True)
     stop_event.set()
+
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
