@@ -38,4 +38,3 @@ node server.js
 ---
 
 After this server is running, you can open the frontend to start the camera stream and view it live with notifications.
-```
